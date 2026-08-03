@@ -1,6 +1,6 @@
 # Task Manager API
 
-A RESTful backend for a Task Management system, built with Node.js and Express as part of **ITUE301 – Advanced Web Development Frameworks, Practical 4**.
+A RESTful backend for a Task Management system, built with Node.js and Express.
 
 ## Features
 
