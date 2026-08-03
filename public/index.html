@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Task Ledger</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="ledger" role="main">
+
+    <header class="ledger__header">
+      <div class="punch-holes" aria-hidden="true">
+        <span></span><span></span><span></span>
+      </div>
+      <div class="ledger__heading">
+        <h1>Task Ledger</h1>
+        <p class="ledger__subtitle">One line per task. Check it, edit it, cross it off.</p>
+      </div>
+      <button id="refreshBtn" class="icon-btn" title="Refresh" aria-label="Refresh entries">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M4 4v5h5M20 20v-5h-5" />
+          <path d="M4.5 15a8 8 0 0 0 14.1 3.4M19.5 9A8 8 0 0 0 5.4 5.6" />
+        </svg>
+      </button>
+    </header>
+
+    <form id="entryForm" class="entry-form" autocomplete="off">
+      <input
+        type="text"
+        id="titleInput"
+        class="entry-form__input"
+        placeholder="Write a new entry&hellip;"
+        maxlength="120"
+        required
+      />
+      <label class="toggle" title="Mark as already done">
+        <input type="checkbox" id="completedInput" />
+        <span class="toggle__track" aria-hidden="true"><span class="toggle__thumb"></span></span>
+        <span class="toggle__label">Done</span>
+      </label>
+      <button type="submit" class="btn btn--add">
+        <span>Add entry</span>
+      </button>
+    </form>
+
+    <p id="statusMsg" class="status-msg" role="status" hidden></p>
+
+    <ul id="entryList" class="entries" aria-live="polite">
+      <!-- rows injected by script.js -->
+    </ul>
+
+    <p id="emptyState" class="empty-state" hidden>
+      Nothing on the ledger yet &mdash; write your first entry above.
+    </p>
+
+    <footer class="ledger__footer">
+      built with Node.js &middot; Express &middot; vanilla JS
+    </footer>
+  </main>
+
+  <template id="rowTemplate">
+    <li class="entry" data-id="">
+      <button class="entry__check" type="button" aria-label="Toggle done">
+        <svg viewBox="0 0 20 20" width="16" height="16">
+          <rect x="1.5" y="1.5" width="17" height="17" rx="4" class="entry__box" />
+          <path class="entry__tick" d="M4.5 10.2l3.2 3.3 7.3-7.6" />
+        </svg>
+      </button>
+      <span class="entry__id"></span>
+      <span class="entry__title" tabindex="0"></span>
+      <span class="entry__stamp">done</span>
+      <div class="entry__actions">
+        <button class="icon-btn icon-btn--edit" type="button" aria-label="Edit entry">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+        </button>
+        <button class="icon-btn icon-btn--delete" type="button" aria-label="Delete entry">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 7h16" />
+            <path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+            <path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" />
+          </svg>
+        </button>
+      </div>
+    </li>
+  </template>
+
+  <script src="script.js"></script>
+</body>
+</html>

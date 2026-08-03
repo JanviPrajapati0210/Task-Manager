@@ -1,0 +1,22 @@
+[
+  {
+    "id": 1,
+    "title": "Flask Learning",
+    "completed": true
+  },
+  {
+    "id": 2,
+    "title": "Portfolio Created",
+    "completed": true
+  },
+  {
+    "id": 4,
+    "title": "Machine learning",
+    "completed": false
+  },
+  {
+    "id": 5,
+    "title": "Complete Practical 4",
+    "completed": false
+  }
+]
