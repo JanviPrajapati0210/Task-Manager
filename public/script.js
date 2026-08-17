@@ -86,6 +86,12 @@ function startEditing(titleEl, id) {
       titleEl.textContent = original;
       return;
     }
+
+    if (!confirm(`Update this task to "${newTitle}"?`)) {
+      titleEl.textContent = original;
+      return;
+    }
+
     try {
       await api(`${API_BASE}/${id}`, {
         method: 'PUT',
@@ -144,6 +150,8 @@ entryForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const title = titleInput.value.trim();
   if (!title) return;
+
+  if (!confirm(`Add "${title}" to the ledger?`)) return;
 
   try {
     await api(API_BASE, {
