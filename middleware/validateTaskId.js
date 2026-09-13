@@ -1,9 +1,13 @@
+// Route-specific middleware that validates :id is a well-formed Mongo
+// ObjectId BEFORE it ever reaches the controller. Previously checked for a
+// positive integer (Practical 4); now IDs are Mongoose ObjectIds.
+const mongoose = require('mongoose');
+
 function validateTaskId(req, res, next) {
   const { id } = req.params;
-  if (!/^[0-9a-fA-F]{24}$/.test(id)) {
-    return res.status(400).json({
-      error: `Invalid task id format: "${id}". Expected a 24-character MongoDB ObjectId.`,
-    });
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: 'Invalid Task ID' });
   }
   next();
 }
