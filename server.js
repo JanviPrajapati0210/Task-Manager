@@ -1,4 +1,3 @@
-const path = require('path');
 const express = require('express');
 const mongoose = require('mongoose');
 require('dotenv').config();
@@ -10,11 +9,8 @@ const taskRoutes = require('./routes/tasks');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-
-// --- MongoDB connection (Practical 5) ---
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log('MongoDB connected successfully'))
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('MongoDB connected'))
   .catch((err) => console.error('MongoDB connection error:', err));
 
 // --- Pipeline order matters! ---
@@ -25,20 +21,22 @@ app.use(express.json());
 // 2. Global logging middleware - runs for every request
 app.use(requestLogger);
 
-// 3. Serve the frontend UI (public/index.html, style.css, script.js)
-app.use(express.static(path.join(__dirname, 'public')));
-
-// 4. API routes
+// 3. Routes
 app.use('/tasks', taskRoutes);
 
-// 5. 404 handler - catches anything that didn't match a route above
+// simple health check, handy for quick sanity testing
+app.get('/', (req, res) => {
+  res.status(200).json({ status: 'Task Manager API is running' });
+});
+
+// 4. 404 handler - catches anything that didn't match a route above
 app.use(notFound);
 
-// 6. Global error handler - ALWAYS LAST
+// 5. Global error handler - ALWAYS LAST
 app.use(errorHandler);
 
 app.listen(PORT, () => {
-  console.log(`Task Manager API running on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
 
 module.exports = app; // exported for potential testing (supertest etc.)

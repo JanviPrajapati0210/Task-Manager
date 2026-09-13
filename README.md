@@ -1,12 +1,11 @@
 # Task Manager API
 
-A RESTful backend for a Task Management system, built with Node.js and Express.
+A RESTful backend for a Task Management system, built with Node.js and Express as part of **ITUE301 – Advanced Web Development Frameworks, Practical 4**.
 
 ## Features
 
-- Full CRUD on `/tasks`, persisted to `data/tasks.json` (survives restarts)
-- Simple frontend UI at `http://localhost:5000/` (`public/`) for adding, updating, deleting, and refreshing tasks without Postman
-- Global request-logging middleware — logs method, URL, timestamp, IP to both the console **and** `logs/server.log`
+- Full CRUD on `/tasks` (in-memory storage, no DB yet)
+- Global request-logging middleware (method, URL, timestamp)
 - Global error-handling middleware (last in the pipeline)
 - Correct HTTP status codes (200, 201, 400, 404, 500)
 - Supplementary middleware:
@@ -19,20 +18,15 @@ A RESTful backend for a Task Management system, built with Node.js and Express.
 ```
 task-manager-api/
 ├── server.js                    # app setup + middleware pipeline order
-├── public/                      # frontend UI (index.html, style.css, script.js)
 ├── routes/tasks.js              # route → middleware → controller wiring
 ├── controllers/taskController.js
 ├── middleware/
-│   ├── logger.js                # global request logger (console + logs/server.log)
+│   ├── logger.js                # global request logger
 │   ├── errorHandler.js          # global error handler (must be last)
 │   ├── notFound.js              # 404 handler
 │   ├── validateContentType.js   # supplementary
 │   └── validateTaskId.js        # supplementary
-├── data/
-│   ├── taskStore.js             # data-access layer
-│   └── tasks.json               # persisted task data (auto-created on first run)
-└── logs/
-    └── server.log                # request log (auto-created on first run)
+└── data/taskStore.js            # in-memory "database"
 ```
 
 ## Setup
@@ -42,7 +36,7 @@ npm install
 npm start        # or: node server.js
 ```
 
-Server runs on `http://localhost:5000`. Open that URL in a browser for the UI, or hit `/tasks` directly for the raw API.
+Server runs on `http://localhost:5000`.
 
 ## Endpoints
 
