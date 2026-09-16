@@ -14,7 +14,15 @@ const taskSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    // Supplementary Problem 1: enum-restricted priority field
+    // NEW: status field for Pending / In Progress / Completed board
+    status: {
+      type: String,
+      enum: {
+        values: ['pending', 'in-progress', 'completed'],
+        message: 'status must be one of: pending, in-progress, completed',
+      },
+      default: 'pending',
+    },
     priority: {
       type: String,
       enum: {
@@ -29,17 +37,11 @@ const taskSchema = new mongoose.Schema(
     },
   },
   {
-    // Makes the "id" virtual (string version of _id) show up in res.json()
-    // output, so the existing public/script.js (which reads task.id)
-    // keeps working with zero frontend changes.
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }
 );
 
-// Supplementary Problem 2: trim whitespace from title before saving.
-// Runs on .save() / Task.create() — NOT on findByIdAndUpdate by default,
-// which is why the controller also trims on update.
 taskSchema.pre('save', function (next) {
   if (this.title) {
     this.title = this.title.trim();

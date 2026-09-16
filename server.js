@@ -1,6 +1,7 @@
 const path = require('path');
 const express = require('express');
 const mongoose = require('mongoose');
+const cors = require('cors');
 require('dotenv').config();
 
 const requestLogger = require('./middleware/logger');
@@ -22,19 +23,22 @@ mongoose
 // 1. Built-in body parser so req.body works on POST/PUT
 app.use(express.json());
 
-// 2. Global logging middleware - runs for every request
+// 2. CORS - allows the React dev server (localhost:5173) to call this API (Practical 6)
+app.use(cors());
+
+// 3. Global logging middleware - runs for every request
 app.use(requestLogger);
 
-// 3. Serve the frontend UI (public/index.html, style.css, script.js)
+// 4. Serve the frontend UI (public/index.html, style.css, script.js)
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 4. API routes
+// 5. API routes
 app.use('/tasks', taskRoutes);
 
-// 5. 404 handler - catches anything that didn't match a route above
+// 6. 404 handler - catches anything that didn't match a route above
 app.use(notFound);
 
-// 6. Global error handler - ALWAYS LAST
+// 7. Global error handler - ALWAYS LAST
 app.use(errorHandler);
 
 app.listen(PORT, () => {

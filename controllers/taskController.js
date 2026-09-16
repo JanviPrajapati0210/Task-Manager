@@ -10,7 +10,7 @@ async function getAllTasks(req, res, next) {
   }
 }
 
-// GET /tasks/:id  (Supplementary Problem 3: explicit 404 JSON)
+// GET /tasks/:id
 async function getTaskById(req, res, next) {
   try {
     const task = await Task.findById(req.params.id);
@@ -29,27 +29,28 @@ async function getTaskById(req, res, next) {
 // POST /tasks
 async function createTask(req, res, next) {
   try {
-    const { title, description, completed, priority } = req.body;
-    const task = await Task.create({ title, description, completed, priority });
+    const { title, description, completed, priority, status } = req.body;
+    const task = await Task.create({ title, description, completed, priority, status });
     res.status(201).json({ message: 'Task Created Successfully', task });
   } catch (err) {
-    next(err); // ValidationError is reshaped centrally in errorHandler.js
+    next(err);
   }
 }
 
 // PUT /tasks/:id
 async function updateTask(req, res, next) {
   try {
-    const { title, description, completed, priority } = req.body;
+    const { title, description, completed, priority, status } = req.body;
     const updates = {};
     if (title !== undefined) updates.title = title.trim();
     if (description !== undefined) updates.description = description;
     if (completed !== undefined) updates.completed = completed;
     if (priority !== undefined) updates.priority = priority;
+    if (status !== undefined) updates.status = status;
 
     const updated = await Task.findByIdAndUpdate(req.params.id, updates, {
-      new: true, // return the document AFTER update
-      runValidators: true, // enforce schema rules (required/enum) on update too
+      new: true,
+      runValidators: true,
     });
 
     if (!updated) {
