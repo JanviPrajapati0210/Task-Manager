@@ -8,6 +8,7 @@ const requestLogger = require('./middleware/logger');
 const notFound = require('./middleware/notFound');
 const errorHandler = require('./middleware/errorHandler');
 const taskRoutes = require('./routes/tasks');
+const authRoutes = require('./routes/auth');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -32,17 +33,20 @@ app.use(requestLogger);
 // 4. Serve the frontend UI (public/index.html, style.css, script.js)
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 5. API routes
+// 5. Auth routes (Practical 7) - register/login are public, /me is protected internally
+app.use('/auth', authRoutes);
+
+// 6. Task routes - ALL protected by JWT auth middleware (Practical 7)
 app.use('/tasks', taskRoutes);
 
-// 6. 404 handler - catches anything that didn't match a route above
+// 7. 404 handler - catches anything that didn't match a route above
 app.use(notFound);
 
-// 7. Global error handler - ALWAYS LAST
+// 8. Global error handler - ALWAYS LAST
 app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`Task Manager API running on http://localhost:${PORT}`);
 });
 
-module.exports = app; // exported for potential testing (supertest etc.)
+module.exports = app;
