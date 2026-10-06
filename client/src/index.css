@@ -1,0 +1,85 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --bg: #211f2e;
+  --bg-elevated: #2b2839;
+  --text: #f3efee;
+  --muted: #aba6bc;
+  --line: rgba(243, 239, 238, 0.09);
+
+  --accent: #b7a9f5;
+  --on-accent: #211f2e;
+  --accent-soft: rgba(183, 169, 245, 0.16);
+  --accent-amber: #decbfe;
+  --accent-amber-soft: rgba(222, 203, 254, 0.14);
+
+  --font-display: 'Sora', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --font-body: 'Inter', sans-serif;
+}
+
+:root.light {
+  --bg: #f5f3fa;
+  --bg-elevated: #ffffff;
+  --text: #2e2a3b;
+  --muted: #6e6885;
+  --line: rgba(124, 111, 224, 0.15);
+
+  --accent: #7c6fe0;
+  --accent-soft: #e7e2fc;
+  --accent-amber: #7466dc;
+  --accent-amber-soft: #e8e4fd;
+  --on-accent: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+ul {
+  list-style: none;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
