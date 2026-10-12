@@ -2,6 +2,15 @@ const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema(
   {
+    // sparse + unique: accounts created before usernames existed have none
+    username: {
+      type: String,
+      trim: true,
+      minlength: [3, 'Username must contain at least 3 characters'],
+      maxlength: [30, 'Username cannot exceed 30 characters'],
+      unique: true,
+      sparse: true,
+    },
     email: {
       type: String,
       required: [true, 'Email is required'],
@@ -26,6 +35,11 @@ const userSchema = new mongoose.Schema(
       unique: true,
       sparse: true,
     },
+    authProvider: {
+      type: String,
+      enum: ['local', 'google'],
+      default: 'local',
+    },
     name: {
       type: String,
       default: '',
@@ -33,6 +47,23 @@ const userSchema = new mongoose.Schema(
     picture: {
       type: String,
       default: '',
+    },
+    // Role-based access control: user < manager < admin
+    role: {
+      type: String,
+      enum: ['user', 'manager', 'admin'],
+      default: 'user',
+    },
+    lastLogin: {
+      type: Date,
+      default: null,
+    },
+    // Password reset: only the SHA-256 HASH of the emailed token is stored
+    resetPasswordToken: {
+      type: String,
+    },
+    resetPasswordExpires: {
+      type: Date,
     },
   },
   { timestamps: true }

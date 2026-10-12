@@ -54,6 +54,12 @@ function LoginPage() {
           required
           style={inputStyle}
         />
+        <Link
+          to="/forgot-password"
+          style={{ color: 'var(--accent)', fontSize: '0.85rem', justifySelf: 'end' }}
+        >
+          Forgot password?
+        </Link>
         {error && <p style={{ color: '#ff6b6b', fontSize: '0.85rem' }}>{error}</p>}
         <button type="submit" className="btn btn--solid" disabled={submitting}>
           {submitting ? 'Logging in...' : 'Log In'}

@@ -2,6 +2,13 @@ const mongoose = require('mongoose');
 
 const taskSchema = new mongoose.Schema(
   {
+    // Owner of the task. Normal users only ever see/change their own tasks.
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: [true, 'Task user is required'],
+      index: true,
+    },
     title: {
       type: String,
       required: [true, 'Title is required'],
@@ -14,7 +21,7 @@ const taskSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    // NEW: status field for Pending / In Progress / Completed board
+    // status field for Pending / In Progress / Completed board
     status: {
       type: String,
       enum: {
@@ -46,6 +53,8 @@ taskSchema.pre('save', function (next) {
   if (this.title) {
     this.title = this.title.trim();
   }
+  // Keep the legacy `completed` flag in sync with `status`
+  this.completed = this.status === 'completed';
   next();
 });
 

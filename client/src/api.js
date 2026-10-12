@@ -17,8 +17,15 @@ export function isLoggedIn() {
   return Boolean(getToken());
 }
 
-export function logoutUser() {
-  setToken(null);
+// Tells the server we are logging out (best effort), then forgets the token.
+export async function logoutUser() {
+  try {
+    await apiFetch('/auth/logout', { method: 'POST' });
+  } catch {
+    // Even if the request fails (offline, token already expired), log out locally.
+  } finally {
+    setToken(null);
+  }
 }
 
 async function handleResponse(res) {
@@ -55,13 +62,25 @@ async function apiFetch(path, options = {}) {
   return handleResponse(res);
 }
 
+// Builds "?a=1&b=2" and skips empty values and the "all" placeholder
+function toQuery(params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '' && value !== 'all') {
+      query.append(key, value);
+    }
+  });
+  const text = query.toString();
+  return text ? `?${text}` : '';
+}
+
 // ---------- Auth ----------
 
-export async function registerUser(email, password) {
+export async function registerUser(username, email, password) {
   return apiFetch('/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ username, email, password }),
   });
 }
 
@@ -84,6 +103,23 @@ export async function loginWithGoogle(credential) {
   });
   setToken(data.token);
   return data;
+}
+
+// Forgot / reset password
+export async function forgotPassword(email) {
+  return apiFetch('/auth/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function resetPassword(token, password) {
+  return apiFetch(`/auth/reset-password/${encodeURIComponent(token)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
 }
 
 export async function getMe() {
@@ -117,4 +153,48 @@ export async function updateTask(id, updates) {
 
 export async function deleteTask(id) {
   return apiFetch(`/tasks/${id}`, { method: 'DELETE' });
+}
+
+// ---------- Reports ----------
+
+// params: { startDate, endDate, status, allUsers }
+export async function getStats(params = {}) {
+  const data = await apiFetch(`/tasks/report/stats${toQuery(params)}`);
+  return data.stats;
+}
+
+// Downloads a PDF from the API (the Authorization header is needed, so a plain
+// <a href> would not work) and hands it to the browser as a file download.
+export async function downloadPdf(path, params = {}, filename = 'tasks-report.pdf') {
+  const token = getToken();
+
+  let res;
+  try {
+    res = await fetch(`${BASE_URL}${path}${toQuery(params)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch (networkErr) {
+    throw new Error('Network error. Is the Express backend running on port 5000?');
+  }
+
+  if (res.status === 401) {
+    setToken(null);
+  }
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    const err = new Error((data && (data.message || data.error)) || `Download failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }

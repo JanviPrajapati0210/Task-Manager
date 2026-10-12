@@ -10,8 +10,20 @@ const requireAuth = require('../middleware/auth');
 // Every task route below requires a valid JWT (Practical 7 requirement)
 router.use(requireAuth);
 
-// GET /tasks         -> list all tasks
+// GET /tasks         -> list tasks (own tasks; admin/manager see everyone's)
 router.get('/', controller.getAllTasks);
+
+// NOTE: the fixed-path routes below MUST come before '/:id',
+// otherwise Express would treat "report" / "download" as a task id.
+
+// GET /tasks/report/stats          -> counts + completion rate (optional date range)
+router.get('/report/stats', controller.getTaskStats);
+
+// GET /tasks/report/pdf            -> PDF report (date range is admin-only)
+router.get('/report/pdf', controller.downloadTasksPDF);
+
+// GET /tasks/download/:status      -> PDF of tasks with one status
+router.get('/download/:status', controller.downloadTasksPDF);
 
 // GET /tasks/:id      -> get one task (id format checked first)
 router.get('/:id', validateTaskId, controller.getTaskById);

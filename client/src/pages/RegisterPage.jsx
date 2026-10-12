@@ -4,6 +4,7 @@ import { registerUser, loginWithGoogle } from '../api';
 import GoogleSignInButton from '../components/GoogleSignInButton';
 
 function RegisterPage() {
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
@@ -16,7 +17,7 @@ function RegisterPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await registerUser(email, password);
+      await registerUser(username.trim(), email, password);
       setSuccess(true);
       setTimeout(() => navigate('/login'), 1200);
     } catch (err) {
@@ -46,6 +47,16 @@ function RegisterPage() {
         </p>
       ) : (
         <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '14px', marginTop: '24px' }}>
+          <input
+            type="text"
+            placeholder="Username (3-30 characters)"
+            minLength={3}
+            maxLength={30}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+            style={inputStyle}
+          />
           <input
             type="email"
             placeholder="Email"

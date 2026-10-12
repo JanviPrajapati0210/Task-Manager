@@ -26,6 +26,15 @@ function errorHandler(err, req, res, next) {
     });
   }
 
+  // Duplicate key (e.g. two people registering the same username/email at once)
+  if (err.code === 11000) {
+    const field = Object.keys(err.keyPattern || {})[0] || 'value';
+    return res.status(409).json({
+      error: 'Conflict',
+      message: `That ${field} is already in use.`,
+    });
+  }
+
   // ...anything else: never leak the raw stack trace to the client.
   const status = err.status || 500;
   res.status(status).json({

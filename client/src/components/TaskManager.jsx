@@ -8,8 +8,11 @@ import {
   isLoggedIn,
   logoutUser,
   getMe,
+  getStats,
+  downloadPdf,
 } from '../api';
 import Toast from './Toast';
+import SessionTimer from './SessionTimer';
 
 // Heavy component (pulls in the whole recharts library). Downloaded only when
 // the user clicks "Show chart" for the first time.
@@ -23,46 +26,75 @@ const STATUSES = [
   { value: 'completed', label: 'Completed' },
 ];
 
-const STATUS_FILTERS = [{ value: 'all', label: 'Status' }, ...STATUSES];
+// Status workflow is forward-only: pending -> in-progress -> completed
+const STATUS_RANK = { pending: 1, 'in-progress': 2, completed: 3 };
+const rankOf = (status) => STATUS_RANK[status || 'pending'] || 1;
+
+const TABS = [{ value: 'all', label: 'All' }, ...STATUSES];
+
 const PRIORITY_FILTERS = [
   { value: 'all', label: 'Priority' },
   ...PRIORITIES.map((p) => ({ value: p, label: p[0].toUpperCase() + p.slice(1) })),
 ];
 
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // auto-logout after 30 minutes of inactivity
+
+const isStaffRole = (role) => role === 'admin' || role === 'manager';
+
+// YYYY-MM-DD in the user's LOCAL time zone (toISOString() would shift the day)
+const toLocalISODate = (date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+    date.getDate()
+  ).padStart(2, '0')}`;
+
 // Memoised row: re-renders only when its own `task` (or the stable callbacks)
 // change, not every time the parent re-renders (e.g. while typing a new title).
-const TaskItem = memo(function TaskItem({ task, onStatusChange, onAskDelete }) {
+const TaskItem = memo(function TaskItem({ task, showOwner, onStatusChange, onEdit, onAskDelete }) {
+  const status = task.status || 'pending';
+  const owner =
+    task.user && typeof task.user === 'object' ? task.user.username || task.user.email : null;
+
+  const meta = [
+    task.createdAt ? `Created ${new Date(task.createdAt).toLocaleDateString()}` : null,
+    showOwner ? `Assigned to ${owner || 'unknown'}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
   return (
-    <li
-      className="projects__card"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '16px',
-        flexWrap: 'wrap',
-        opacity: task.__optimistic ? 0.6 : 1,
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '160px' }}>
-        <span style={{ color: 'var(--text)' }}>{task.title}</span>
-        <span style={priorityBadgeStyle(task.priority)}>{task.priority}</span>
+    <li className="projects__card task-row" style={{ opacity: task.__optimistic ? 0.6 : 1 }}>
+      <div className="task-row__main">
+        <div className="task-row__title">
+          <span style={{ color: 'var(--text)' }}>{task.title}</span>
+          <span style={priorityBadgeStyle(task.priority)}>{task.priority}</span>
+        </div>
+        {task.description && <p className="task-row__desc">{task.description}</p>}
+        {meta && <p className="task-row__meta">{meta}</p>}
       </div>
 
-      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+      <div className="task-row__actions">
+        {/* Forward-only: statuses BEFORE the current one are disabled */}
         <select
-          value={task.status || 'pending'}
+          value={status}
           onChange={(e) => onStatusChange(task, e.target.value)}
           disabled={task.__optimistic}
           style={inputStyle}
         >
           {STATUSES.map((s) => (
-            <option key={s.value} value={s.value}>
+            <option key={s.value} value={s.value} disabled={rankOf(s.value) < rankOf(status)}>
               {s.label}
             </option>
           ))}
         </select>
 
+        <button
+          className="btn btn--outline"
+          style={{ padding: '4px 12px' }}
+          onClick={() => onEdit(task)}
+          disabled={task.__optimistic}
+        >
+          Edit
+        </button>
         <button
           className="btn btn--outline"
           style={{ padding: '4px 12px' }}
@@ -81,19 +113,50 @@ const TaskManager = () => {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [userEmail, setUserEmail] = useState(null);
+  const [user, setUser] = useState(null);
+
+  // add-task form
   const [newTitle, setNewTitle] = useState('');
+  const [newDescription, setNewDescription] = useState('');
   const [newPriority, setNewPriority] = useState('medium');
   const [newStatus, setNewStatus] = useState('pending');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [filterPriority, setFilterPriority] = useState('all');
   const [submitting, setSubmitting] = useState(false);
+
+  // list filters
+  const [activeTab, setActiveTab] = useState('all');
+  const [filterPriority, setFilterPriority] = useState('all');
+
+  // dialogs / UI
   const [confirmingTask, setConfirmingTask] = useState(null);
+  const [editingTask, setEditingTask] = useState(null);
+  const [editForm, setEditForm] = useState({ title: '', description: '', priority: 'medium', status: 'pending' });
+  const [savingEdit, setSavingEdit] = useState(false);
   const [toast, setToast] = useState(null);
   const [showChart, setShowChart] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  // admin report
+  const [report, setReport] = useState({ startDate: '', endDate: '', status: 'all', allUsers: 'true' });
+  const [reportStats, setReportStats] = useState(null);
+  const [reportBusy, setReportBusy] = useState(false);
+
+  const isStaff = isStaffRole(user?.role);
+  const isAdmin = user?.role === 'admin';
 
   const showToast = useCallback((message, type = 'success') => setToast({ message, type }), []);
   const closeToast = useCallback(() => setToast(null), []);
+
+  // Returns true when the error was a 401 (token expired) and we already redirected
+  const handleAuthError = useCallback(
+    (err) => {
+      if (err.status === 401) {
+        navigate('/login');
+        return true;
+      }
+      return false;
+    },
+    [navigate]
+  );
 
   const loadTasks = useCallback(async () => {
     setLoading(true);
@@ -102,16 +165,12 @@ const TaskManager = () => {
       const data = await getTasks();
       setTasks(data);
     } catch (err) {
-      if (err.status === 401) {
-        // Supplementary Problem: expired/invalid token -> redirect to login
-        navigate('/login');
-        return;
-      }
+      if (handleAuthError(err)) return;
       setError(err.message || 'Failed to load tasks.');
     } finally {
       setLoading(false);
     }
-  }, [navigate]);
+  }, [handleAuthError]);
 
   useEffect(() => {
     if (!isLoggedIn()) {
@@ -119,7 +178,7 @@ const TaskManager = () => {
       return;
     }
     getMe()
-      .then((user) => setUserEmail(user.email))
+      .then(setUser)
       .catch(() => {
         // token invalid/expired even before the first task fetch
         navigate('/login');
@@ -127,38 +186,46 @@ const TaskManager = () => {
     loadTasks();
   }, [loadTasks, navigate]);
 
-  const handleLogout = () => {
-    logoutUser();
+  const handleLogout = useCallback(async () => {
+    await logoutUser();
     navigate('/login');
-  };
+  }, [navigate]);
+
+  const handleSessionExpired = useCallback(async () => {
+    await logoutUser();
+    window.alert('Your session has timed out due to inactivity. Please log in again.');
+    navigate('/login');
+  }, [navigate]);
 
   const handleAddTask = async (e) => {
     e.preventDefault();
     const title = newTitle.trim();
     if (!title) return;
+    const description = newDescription.trim();
 
     const tempId = `temp-${Date.now()}`;
     const optimisticTask = {
       _id: tempId,
       title,
+      description,
       priority: newPriority,
       status: newStatus,
+      createdAt: new Date().toISOString(),
+      user: user ? { username: user.username, email: user.email } : null,
       __optimistic: true,
     };
     setTasks((prev) => [optimisticTask, ...prev]);
     setNewTitle('');
+    setNewDescription('');
     setSubmitting(true);
 
     try {
-      const created = await createTask({ title, priority: newPriority, status: newStatus });
+      const created = await createTask({ title, description, priority: newPriority, status: newStatus });
       setTasks((prev) => prev.map((t) => (t._id === tempId ? created : t)));
       showToast('Task added.', 'success');
     } catch (err) {
       setTasks((prev) => prev.filter((t) => t._id !== tempId));
-      if (err.status === 401) {
-        navigate('/login');
-        return;
-      }
+      if (handleAuthError(err)) return;
       showToast(err.message || 'Could not add task.', 'error');
     } finally {
       setSubmitting(false);
@@ -177,19 +244,61 @@ const TaskManager = () => {
       try {
         const updated = await updateTask(task._id, { status: newStatusValue });
         setTasks((prev) => prev.map((t) => (t._id === task._id ? updated : t)));
+        if (newStatusValue === 'completed') {
+          showToast('Task completed. A notification email was sent.', 'success');
+        }
       } catch (err) {
         setTasks((prev) =>
           prev.map((t) => (t._id === task._id ? { ...t, status: previousStatus } : t))
         );
-        if (err.status === 401) {
-          navigate('/login');
-          return;
-        }
+        if (handleAuthError(err)) return;
         showToast(err.message || 'Could not update task.', 'error');
       }
     },
-    [navigate, showToast]
+    [handleAuthError, showToast]
   );
+
+  const openEdit = useCallback((task) => {
+    setEditingTask(task);
+    setEditForm({
+      title: task.title,
+      description: task.description || '',
+      priority: task.priority || 'medium',
+      status: task.status || 'pending',
+    });
+  }, []);
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    const title = editForm.title.trim();
+    if (!title) {
+      showToast('Title cannot be empty.', 'error');
+      return;
+    }
+
+    const payload = {
+      title,
+      description: editForm.description.trim(),
+      priority: editForm.priority,
+    };
+    // Only send the status when it really changed (forward-only rule on the server)
+    if (editForm.status !== (editingTask.status || 'pending')) {
+      payload.status = editForm.status;
+    }
+
+    setSavingEdit(true);
+    try {
+      const updated = await updateTask(editingTask._id, payload);
+      setTasks((prev) => prev.map((t) => (t._id === updated._id ? updated : t)));
+      setEditingTask(null);
+      showToast('Task updated.', 'success');
+    } catch (err) {
+      if (handleAuthError(err)) return;
+      showToast(err.message || 'Could not update task.', 'error');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   const handleDelete = async (id) => {
     const previous = tasks;
@@ -200,23 +309,105 @@ const TaskManager = () => {
       showToast('Task deleted.', 'success');
     } catch (err) {
       setTasks(previous);
-      if (err.status === 401) {
-        navigate('/login');
-        return;
-      }
+      if (handleAuthError(err)) return;
       showToast(err.message || 'Could not delete task.', 'error');
     }
   };
 
+  // PDF of the tasks in the currently selected tab (admin/manager: everyone's tasks)
+  const handleDownloadTab = async () => {
+    setDownloading(true);
+    try {
+      const path = activeTab === 'all' ? '/tasks/report/pdf' : `/tasks/download/${activeTab}`;
+      await downloadPdf(
+        path,
+        { priority: filterPriority, allUsers: isStaff ? 'true' : undefined },
+        `tasks-${activeTab}-${Date.now()}.pdf`
+      );
+    } catch (err) {
+      if (handleAuthError(err)) return;
+      showToast(err.message || 'Could not download the PDF.', 'error');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  // ---------- Admin: date-range report ----------
+
+  const reportParams = () => ({
+    startDate: report.startDate,
+    endDate: report.endDate,
+    status: report.status,
+    allUsers: report.allUsers === 'true' ? 'true' : undefined,
+  });
+
+  const updateReport = (field, value) => {
+    setReport((prev) => ({ ...prev, [field]: value }));
+    setReportStats(null);
+  };
+
+  const setReportPreset = (preset) => {
+    if (preset === 'month') {
+      const now = new Date();
+      setReport((prev) => ({
+        ...prev,
+        startDate: toLocalISODate(new Date(now.getFullYear(), now.getMonth(), 1)),
+        endDate: toLocalISODate(now),
+      }));
+    } else {
+      setReport((prev) => ({ ...prev, startDate: '', endDate: '' }));
+    }
+    setReportStats(null);
+  };
+
+  const handlePreviewStats = async () => {
+    setReportBusy(true);
+    try {
+      setReportStats(await getStats(reportParams()));
+    } catch (err) {
+      if (handleAuthError(err)) return;
+      showToast(err.message || 'Could not load statistics.', 'error');
+    } finally {
+      setReportBusy(false);
+    }
+  };
+
+  const handleDownloadReport = async (e) => {
+    e.preventDefault();
+    setReportBusy(true);
+    try {
+      await downloadPdf(
+        '/tasks/report/pdf',
+        reportParams(),
+        `Admin-Task-Report-${report.startDate || 'all'}-to-${report.endDate || 'all'}.pdf`
+      );
+    } catch (err) {
+      if (handleAuthError(err)) return;
+      showToast(err.message || 'Could not generate the report.', 'error');
+    } finally {
+      setReportBusy(false);
+    }
+  };
+
   // Must stay ABOVE the early returns below (Rules of Hooks).
+  const counts = useMemo(
+    () => ({
+      all: tasks.length,
+      pending: tasks.filter((t) => (t.status || 'pending') === 'pending').length,
+      'in-progress': tasks.filter((t) => t.status === 'in-progress').length,
+      completed: tasks.filter((t) => t.status === 'completed').length,
+    }),
+    [tasks]
+  );
+
   const visibleTasks = useMemo(
     () =>
       tasks.filter((t) => {
-        const statusOk = filterStatus === 'all' || (t.status || 'pending') === filterStatus;
+        const statusOk = activeTab === 'all' || (t.status || 'pending') === activeTab;
         const priorityOk = filterPriority === 'all' || t.priority === filterPriority;
         return statusOk && priorityOk;
       }),
-    [tasks, filterStatus, filterPriority]
+    [tasks, activeTab, filterPriority]
   );
 
   if (loading) {
@@ -272,23 +463,167 @@ const TaskManager = () => {
         </div>
       )}
 
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '12px',
-          marginBottom: '8px',
-        }}
-      >
-        <span style={{ color: 'var(--muted)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}>
-          {userEmail ? `Logged in as ${userEmail}` : ''}
-        </span>
-        <button className="btn btn--outline" style={{ padding: '4px 14px' }} onClick={handleLogout}>
-          Logout
-        </button>
+      {editingTask && (
+        <div className="modal-backdrop" onClick={() => setEditingTask(null)}>
+          <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={handleSaveEdit}>
+            <h3 style={{ fontFamily: 'var(--font-display)', color: 'var(--text)' }}>Edit task</h3>
+            <input
+              type="text"
+              value={editForm.title}
+              onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
+              placeholder="Title"
+              style={inputStyle}
+              required
+            />
+            <textarea
+              rows={3}
+              value={editForm.description}
+              onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+              placeholder="Description (optional)"
+              style={{ ...inputStyle, borderRadius: '12px', resize: 'vertical' }}
+            />
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <select
+                value={editForm.priority}
+                onChange={(e) => setEditForm((f) => ({ ...f, priority: e.target.value }))}
+                style={{ ...inputStyle, flex: 1 }}
+              >
+                {PRIORITIES.map((p) => (
+                  <option key={p} value={p}>
+                    {p[0].toUpperCase() + p.slice(1)}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={editForm.status}
+                onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))}
+                style={{ ...inputStyle, flex: 1 }}
+              >
+                {STATUSES.map((s) => (
+                  <option
+                    key={s.value}
+                    value={s.value}
+                    disabled={rankOf(s.value) < rankOf(editingTask.status)}
+                  >
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn btn--outline" onClick={() => setEditingTask(null)}>
+                Cancel
+              </button>
+              <button type="submit" className="btn btn--solid" disabled={savingEdit}>
+                {savingEdit ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ---------- User bar: who is logged in, role, session timer, logout ---------- */}
+      <div className="user-bar">
+        <div className="user-bar__info">
+          <strong style={{ color: 'var(--text)' }}>{user ? user.username || user.email : ''}</strong>
+          {user && <span className={`role-badge role-${user.role}`}>{user.role}</span>}
+          {user && user.username && <small>{user.email}</small>}
+        </div>
+        <div className="user-bar__actions">
+          <SessionTimer timeoutMs={IDLE_TIMEOUT_MS} onExpire={handleSessionExpired} />
+          <button className="btn btn--outline" style={{ padding: '4px 14px' }} onClick={handleLogout}>
+            Logout
+          </button>
+        </div>
       </div>
+
+      {isAdmin && (
+        <div className="admin-banner">
+          <strong>Admin mode:</strong> you can see every user's tasks and generate date-range PDF
+          reports.
+        </div>
+      )}
+
+      {/* ---------- Admin only: date-range report ---------- */}
+      {isAdmin && (
+        <form className="report-card" onSubmit={handleDownloadReport}>
+          <h3 style={{ fontFamily: 'var(--font-display)', color: 'var(--text)' }}>Admin report</h3>
+          <div className="report-card__grid">
+            <label>
+              <span>From</span>
+              <input
+                type="date"
+                value={report.startDate}
+                onChange={(e) => updateReport('startDate', e.target.value)}
+                style={inputStyle}
+              />
+            </label>
+            <label>
+              <span>To</span>
+              <input
+                type="date"
+                value={report.endDate}
+                onChange={(e) => updateReport('endDate', e.target.value)}
+                style={inputStyle}
+              />
+            </label>
+            <label>
+              <span>Status</span>
+              <select
+                value={report.status}
+                onChange={(e) => updateReport('status', e.target.value)}
+                style={inputStyle}
+              >
+                <option value="all">All statuses</option>
+                {STATUSES.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Users</span>
+              <select
+                value={report.allUsers}
+                onChange={(e) => updateReport('allUsers', e.target.value)}
+                style={inputStyle}
+              >
+                <option value="true">All users</option>
+                <option value="false">Only me</option>
+              </select>
+            </label>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '14px' }}>
+            <button type="button" className="btn btn--outline" onClick={() => setReportPreset('month')}>
+              This month
+            </button>
+            <button type="button" className="btn btn--outline" onClick={() => setReportPreset('all')}>
+              All time
+            </button>
+            <button
+              type="button"
+              className="btn btn--outline"
+              onClick={handlePreviewStats}
+              disabled={reportBusy}
+            >
+              Preview stats
+            </button>
+            <button type="submit" className="btn btn--solid" disabled={reportBusy}>
+              {reportBusy ? 'Working...' : 'Download PDF report'}
+            </button>
+          </div>
+
+          {reportStats && (
+            <p className="report-card__stats">
+              Total {reportStats.total} · Pending {reportStats.pending} · In progress{' '}
+              {reportStats.inProgress} · Completed {reportStats.completed} · Completion{' '}
+              {reportStats.completionRate}%
+            </p>
+          )}
+        </form>
+      )}
 
       <div
         style={{
@@ -301,17 +636,10 @@ const TaskManager = () => {
         }}
       >
         <span className="section__title section__title--projects" style={{ marginBottom: 0 }}>
-          My Tasks
+          {isStaff ? 'All Tasks' : 'My Tasks'}
         </span>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={inputStyle}>
-            {STATUS_FILTERS.map((f) => (
-              <option key={f.value} value={f.value}>
-                {f.label}
-              </option>
-            ))}
-          </select>
           <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} style={inputStyle}>
             {PRIORITY_FILTERS.map((f) => (
               <option key={f.value} value={f.value}>
@@ -322,6 +650,15 @@ const TaskManager = () => {
           <span style={countBadgeStyle}>
             {visibleTasks.length} {visibleTasks.length === 1 ? 'task' : 'tasks'}
           </span>
+          <button
+            type="button"
+            className="btn btn--outline"
+            style={{ padding: '4px 14px' }}
+            onClick={handleDownloadTab}
+            disabled={downloading}
+          >
+            {downloading ? 'Preparing...' : 'Download PDF'}
+          </button>
           <button
             type="button"
             className="btn btn--outline"
@@ -346,32 +683,61 @@ const TaskManager = () => {
         </Suspense>
       )}
 
-      <form onSubmit={handleAddTask} style={{ display: 'flex', gap: '12px', marginBottom: '32px', flexWrap: 'wrap' }}>
+      <form
+        onSubmit={handleAddTask}
+        style={{ display: 'grid', gap: '12px', marginBottom: '32px' }}
+      >
         <input
           type="text"
           placeholder="Add a new task..."
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
-          style={{ ...inputStyle, flex: 1, minWidth: '200px' }}
+          style={inputStyle}
         />
-        <select value={newPriority} onChange={(e) => setNewPriority(e.target.value)} style={inputStyle}>
-          {PRIORITIES.map((p) => (
-            <option key={p} value={p}>
-              {p[0].toUpperCase() + p.slice(1)}
-            </option>
-          ))}
-        </select>
-        <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} style={inputStyle}>
-          {STATUSES.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-        <button type="submit" className="btn btn--solid" disabled={submitting || !newTitle.trim()}>
-          {submitting ? 'Adding...' : 'Add Task'}
-        </button>
+        <textarea
+          rows={2}
+          placeholder="Description (optional)"
+          value={newDescription}
+          onChange={(e) => setNewDescription(e.target.value)}
+          style={{ ...inputStyle, borderRadius: '12px', resize: 'vertical' }}
+        />
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <select value={newPriority} onChange={(e) => setNewPriority(e.target.value)} style={inputStyle}>
+            {PRIORITIES.map((p) => (
+              <option key={p} value={p}>
+                {p[0].toUpperCase() + p.slice(1)}
+              </option>
+            ))}
+          </select>
+          <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} style={inputStyle}>
+            {STATUSES.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+          <button type="submit" className="btn btn--solid" disabled={submitting || !newTitle.trim()}>
+            {submitting ? 'Adding...' : 'Add Task'}
+          </button>
+        </div>
       </form>
+
+      {/* ---------- Status tabs with live counts ---------- */}
+      <div className="status-tabs" role="tablist">
+        {TABS.map((tab) => (
+          <button
+            key={tab.value}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.value}
+            className={`status-tab${activeTab === tab.value ? ' status-tab--active' : ''}`}
+            onClick={() => setActiveTab(tab.value)}
+          >
+            {tab.label}
+            <span className="status-tab__count">{counts[tab.value]}</span>
+          </button>
+        ))}
+      </div>
 
       {visibleTasks.length === 0 ? (
         <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '40px 0' }}>
@@ -383,7 +749,9 @@ const TaskManager = () => {
             <TaskItem
               key={task._id}
               task={task}
+              showOwner={isStaff}
               onStatusChange={handleStatusChange}
+              onEdit={openEdit}
               onAskDelete={setConfirmingTask}
             />
           ))}
