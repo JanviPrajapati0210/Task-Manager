@@ -25,6 +25,16 @@ router.get('/report/pdf', controller.downloadTasksPDF);
 // GET /tasks/download/:status      -> PDF of tasks with one status
 router.get('/download/:status', controller.downloadTasksPDF);
 
+// Cache debug & admin endpoints (MUST come before '/:id')
+// GET /tasks/cache/stats          -> inspect cache hits, misses, hit rate, and active keys
+router.get('/cache/stats', controller.getCacheStats);
+
+// POST /tasks/cache/reset         -> reset cache and metrics (useful for testing)
+router.post('/cache/reset', controller.resetCacheStats);
+
+// POST /tasks/cache/ttl           -> dynamically update TTL for experiments ({ ttl: 30 })
+router.post('/cache/ttl', controller.setCacheTTL);
+
 // GET /tasks/:id      -> get one task (id format checked first)
 router.get('/:id', validateTaskId, controller.getTaskById);
 

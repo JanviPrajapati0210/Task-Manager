@@ -10,6 +10,8 @@ const {
   forgotPassword,
   resetPassword,
   me,
+  getAllUsers,
+  updateUserRole,
 } = require('../controllers/authController');
 const requireAuth = require('../middleware/auth');
 
@@ -36,5 +38,11 @@ router.post('/reset-password/:token', resetPassword);
 
 // GET /auth/me  (protected - Supplementary Problem)
 router.get('/me', requireAuth, me);
+
+// GET /auth/users  (protected - Team & Roles management)
+router.get('/users', requireAuth, getAllUsers);
+
+// PUT /auth/users/:id/role  (protected admin-only - Update user role)
+router.put('/users/:id/role', requireAuth, updateUserRole);
 
 module.exports = router;

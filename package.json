@@ -5,6 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "benchmark": "node scripts/benchmark-cache.js",
+    "test:cache": "node scripts/benchmark-cache.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -18,6 +20,7 @@
     "google-auth-library": "^11.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.9.0",
+    "node-cache": "^5.1.2",
     "nodemailer": "^10.0.15",
     "pdfkit": "^0.20.2"
   }

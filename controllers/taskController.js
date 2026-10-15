@@ -1,6 +1,7 @@
 const PDFDocument = require('pdfkit');
 const Task = require('../models/Task');
 const { sendTaskCompletedEmail } = require('../utils/taskEmail');
+const taskCache = require('../utils/cache');
 
 const VALID_STATUSES = ['pending', 'in-progress', 'completed'];
 const VALID_PRIORITIES = ['low', 'medium', 'high'];
@@ -58,7 +59,18 @@ function reportScope(req) {
 
 // GET /tasks
 async function getAllTasks(req, res, next) {
+  const startTime = process.hrtime.bigint();
   try {
+    const cacheKey = taskCache.makeAllTasksKey(req);
+    const cached = taskCache.get('allTasks', cacheKey);
+    if (cached) {
+      const elapsedMs = (Number(process.hrtime.bigint() - startTime) / 1e6).toFixed(2);
+      res.setHeader('X-Cache', 'HIT');
+      res.setHeader('X-Cache-TTL', `${taskCache.getTTL()}s`);
+      res.setHeader('X-Response-Time', `${elapsedMs}ms`);
+      return res.status(200).json(cached);
+    }
+
     const { status, priority, startDate, endDate, userId, self } = req.query;
     const query = {};
 
@@ -77,6 +89,12 @@ async function getAllTasks(req, res, next) {
     if (range) query.createdAt = range;
 
     const tasks = await Task.find(query).populate('user', OWNER_FIELDS).sort({ createdAt: -1 });
+    taskCache.set('allTasks', cacheKey, tasks);
+
+    const elapsedMs = (Number(process.hrtime.bigint() - startTime) / 1e6).toFixed(2);
+    res.setHeader('X-Cache', 'MISS');
+    res.setHeader('X-Cache-TTL', `${taskCache.getTTL()}s`);
+    res.setHeader('X-Response-Time', `${elapsedMs}ms`);
     res.status(200).json(tasks);
   } catch (err) {
     next(err);
@@ -85,13 +103,30 @@ async function getAllTasks(req, res, next) {
 
 // GET /tasks/:id
 async function getTaskById(req, res, next) {
+  const startTime = process.hrtime.bigint();
   try {
+    const cacheKey = taskCache.makeSingleTaskKey(req);
+    const cached = taskCache.get('singleTask', cacheKey);
+    if (cached) {
+      const elapsedMs = (Number(process.hrtime.bigint() - startTime) / 1e6).toFixed(2);
+      res.setHeader('X-Cache', 'HIT');
+      res.setHeader('X-Cache-TTL', `${taskCache.getTTL()}s`);
+      res.setHeader('X-Response-Time', `${elapsedMs}ms`);
+      return res.status(200).json(cached);
+    }
+
     const query = { _id: req.params.id };
     if (!isStaff(req.user)) query.user = req.user._id;
 
     const task = await Task.findOne(query).populate('user', OWNER_FIELDS);
     if (!task) return notFound(res, req.params.id);
 
+    taskCache.set('singleTask', cacheKey, task);
+
+    const elapsedMs = (Number(process.hrtime.bigint() - startTime) / 1e6).toFixed(2);
+    res.setHeader('X-Cache', 'MISS');
+    res.setHeader('X-Cache-TTL', `${taskCache.getTTL()}s`);
+    res.setHeader('X-Response-Time', `${elapsedMs}ms`);
     res.status(200).json(task);
   } catch (err) {
     next(err);
@@ -111,9 +146,10 @@ async function createTask(req, res, next) {
     }
 
     const taskStatus = status || 'pending';
+    const assignedUser = isStaff(req.user) && req.body.userId ? req.body.userId : req.user._id;
 
     const task = await Task.create({
-      user: req.user._id,
+      user: assignedUser,
       title: title.trim(),
       description: typeof description === 'string' ? description.trim() : '',
       priority: priority || 'medium',
@@ -121,6 +157,9 @@ async function createTask(req, res, next) {
       completed: taskStatus === 'completed',
     });
     await task.populate('user', OWNER_FIELDS);
+
+    // Invalidate collection caches on write operation (POST)
+    taskCache.invalidateAllTasks('create_task');
 
     // Created directly as completed -> send the notification email
     if (task.status === 'completed') {
@@ -191,6 +230,9 @@ async function updateTask(req, res, next) {
       runValidators: true,
     }).populate('user', OWNER_FIELDS);
 
+    // Invalidate single task cache and all list caches on write operation (PUT)
+    taskCache.invalidateSingleTask(req.params.id, 'update_task');
+
     // Email the task OWNER when their task transitions to completed
     if (becameCompleted) {
       sendTaskCompletedEmail(updated.user || req.user, updated).catch((err) =>
@@ -212,6 +254,9 @@ async function deleteTask(req, res, next) {
 
     const deleted = await Task.findOneAndDelete(scope);
     if (!deleted) return notFound(res, req.params.id);
+
+    // Invalidate single task cache and all list caches on write operation (DELETE)
+    taskCache.invalidateSingleTask(req.params.id, 'delete_task');
 
     res.status(200).json({ message: 'Task deleted successfully.', task: deleted });
   } catch (err) {
@@ -429,6 +474,37 @@ async function downloadTasksPDF(req, res, next) {
   }
 }
 
+// GET /tasks/cache/stats
+function getCacheStats(req, res) {
+  res.status(200).json(taskCache.getStats());
+}
+
+// POST /tasks/cache/reset
+function resetCacheStats(req, res) {
+  taskCache.resetStats();
+  res.status(200).json({
+    message: 'Cache and statistics reset successfully.',
+    ...taskCache.getStats(),
+  });
+}
+
+// POST /tasks/cache/ttl
+function setCacheTTL(req, res) {
+  try {
+    const { ttl } = req.body || {};
+    if (ttl === undefined) {
+      return badRequest(res, 'ttl parameter is required (in seconds).');
+    }
+    const newTTL = taskCache.setTTL(ttl);
+    res.status(200).json({
+      message: `Cache TTL updated to ${newTTL} seconds.`,
+      ttlSeconds: newTTL,
+    });
+  } catch (err) {
+    badRequest(res, err.message);
+  }
+}
+
 module.exports = {
   getAllTasks,
   getTaskById,
@@ -437,4 +513,7 @@ module.exports = {
   deleteTask,
   getTaskStats,
   downloadTasksPDF,
+  getCacheStats,
+  resetCacheStats,
+  setCacheTTL,
 };

@@ -9,6 +9,7 @@ const notFound = require('./middleware/notFound');
 const errorHandler = require('./middleware/errorHandler');
 const taskRoutes = require('./routes/tasks');
 const authRoutes = require('./routes/auth');
+const taskCache = require('./utils/cache');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -33,10 +34,29 @@ app.use(requestLogger);
 // 4. Serve the frontend UI (public/index.html, style.css, script.js)
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 5. Auth routes (Practical 7) - register/login are public, /me is protected internally
+// 5. Cache debug endpoints (Public debug inspection)
+app.get('/cache/stats', (req, res) => res.status(200).json(taskCache.getStats()));
+app.post('/cache/reset', (req, res) => {
+  taskCache.resetStats();
+  res.status(200).json({ message: 'Cache and statistics reset successfully', ...taskCache.getStats() });
+});
+app.post('/cache/ttl', (req, res) => {
+  try {
+    const { ttl } = req.body || {};
+    if (ttl === undefined) {
+      return res.status(400).json({ error: 'Validation Error', message: 'ttl parameter is required (in seconds).' });
+    }
+    const newTTL = taskCache.setTTL(ttl);
+    res.status(200).json({ message: `Cache TTL updated to ${newTTL} seconds`, ttlSeconds: newTTL });
+  } catch (err) {
+    res.status(400).json({ error: 'Validation Error', message: err.message });
+  }
+});
+
+// 6. Auth routes (Practical 7) - register/login are public, /me is protected internally
 app.use('/auth', authRoutes);
 
-// 6. Task routes - ALL protected by JWT auth middleware (Practical 7)
+// 7. Task routes - ALL protected by JWT auth middleware (Practical 7)
 app.use('/tasks', taskRoutes);
 
 // 7. 404 handler - catches anything that didn't match a route above

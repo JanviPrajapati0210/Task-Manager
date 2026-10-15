@@ -48,10 +48,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
-    // Role-based access control: user < manager < admin
+    // Role-based access control: user / employee < manager < admin
     role: {
       type: String,
-      enum: ['user', 'manager', 'admin'],
+      enum: ['user', 'employee', 'manager', 'admin'],
       default: 'user',
     },
     lastLogin: {

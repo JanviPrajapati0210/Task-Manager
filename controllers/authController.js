@@ -373,6 +373,75 @@ function me(req, res) {
   res.status(200).json({ user: publicUser(req.user) });
 }
 
+// GET /auth/users (protected) - Returns team members / users
+async function getAllUsers(req, res, next) {
+  try {
+    const users = await User.find(
+      {},
+      'username email role name picture createdAt lastLogin'
+    ).sort({ createdAt: -1 });
+
+    res.status(200).json({
+      users: users.map((u) => ({
+        id: u._id,
+        _id: u._id,
+        username: u.username || u.email.split('@')[0],
+        email: u.email,
+        role: u.role || 'user',
+        name: u.name,
+        picture: u.picture,
+        createdAt: u.createdAt,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// PUT /auth/users/:id/role (admin only) - Update user role
+async function updateUserRole(req, res, next) {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Only administrators can update user roles.',
+      });
+    }
+
+    const { role } = req.body;
+    const VALID_ROLES = ['user', 'employee', 'manager', 'admin'];
+    if (!role || !VALID_ROLES.includes(role)) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}`,
+      });
+    }
+
+    const updated = await User.findByIdAndUpdate(
+      req.params.id,
+      { role },
+      { new: true, select: 'username email role name picture createdAt' }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ error: 'Not Found', message: 'User not found.' });
+    }
+
+    res.status(200).json({
+      message: 'User role updated successfully.',
+      user: {
+        id: updated._id,
+        _id: updated._id,
+        username: updated.username || updated.email.split('@')[0],
+        email: updated.email,
+        role: updated.role,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   register,
   login,
@@ -382,4 +451,6 @@ module.exports = {
   forgotPassword,
   resetPassword,
   me,
+  getAllUsers,
+  updateUserRole,
 };

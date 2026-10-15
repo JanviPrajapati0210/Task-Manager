@@ -198,3 +198,18 @@ export async function downloadPdf(path, params = {}, filename = 'tasks-report.pd
   link.remove();
   URL.revokeObjectURL(url);
 }
+
+// ---------- Team & Roles ----------
+
+export async function getUsers() {
+  const data = await apiFetch('/auth/users');
+  return data.users;
+}
+
+export async function updateUserRole(userId, role) {
+  return apiFetch(`/auth/users/${userId}/role`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role }),
+  });
+}
