@@ -1,0 +1,80 @@
+services:
+  # ===========================================================================
+  # 1. MongoDB Database Service
+  # ===========================================================================
+  mongodb:
+    image: mongo:6.0
+    container_name: taskmanager-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      # Named volume for persistent data across container restarts
+      - mongodb_data:/data/db
+    networks:
+      - taskmanager-network
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --eval 'db.adminCommand(\"ping\")' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ===========================================================================
+  # 2. Node.js & Express API Backend Service
+  # ===========================================================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taskmanager-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - MONGO_URI=mongodb://mongodb:27017/taskmanager
+      - JWT_SECRET=super_secret_jwt_key_taskmanager_2026
+      - NODE_ENV=production
+      - ADMIN_EMAILS=admin@example.com
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - taskmanager-network
+
+  # ===========================================================================
+  # 3. React Frontend Service (Multi-stage Nginx)
+  # ===========================================================================
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:5000
+    container_name: taskmanager-frontend
+    restart: unless-stopped
+    ports:
+      # Exposed on both port 3000 (standard web) and 5173 (Vite standard)
+      - "3000:80"
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - taskmanager-network
+
+# =============================================================================
+# Named Volumes (Data Persistence)
+# =============================================================================
+volumes:
+  mongodb_data:
+    name: taskmanager_mongodb_data
+    driver: local
+
+# =============================================================================
+# Internal Docker Network (Service Discovery & Communication)
+# =============================================================================
+networks:
+  taskmanager-network:
+    name: taskmanager_internal_network
+    driver: bridge

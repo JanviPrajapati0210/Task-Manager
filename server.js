@@ -15,11 +15,18 @@ const notificationEmitter = require('./utils/notificationEmitter');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// --- MongoDB connection (Practical 5) ---
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log('MongoDB connected successfully'))
-  .catch((err) => console.error('MongoDB connection error:', err));
+// --- MongoDB connection (with automatic retry for Docker/cluster startup) ---
+const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/taskmanager';
+const connectDB = () => {
+  mongoose
+    .connect(mongoUri)
+    .then(() => console.log('MongoDB connected successfully'))
+    .catch((err) => {
+      console.error('MongoDB connection error, retrying in 3 seconds...', err.message);
+      setTimeout(connectDB, 3000);
+    });
+};
+connectDB();
 
 // --- Pipeline order matters! ---
 

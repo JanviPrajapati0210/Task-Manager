@@ -36,9 +36,21 @@ Task-Manager/
     └── src/ {pages, components, utils, api.js}
 ```
 
-## Setup
+## Setup & Deployment
 
-### 1. Backend
+### Quickstart with Docker Compose (Recommended)
+Run the entire application (React Frontend, Node/Express Backend, MongoDB with persistent storage) with a single command:
+```bash
+docker compose up --build
+```
+- **Frontend:** [http://localhost:3000](http://localhost:3000) or [http://localhost:5173](http://localhost:5173)
+- **Backend API:** [http://localhost:5000](http://localhost:5000)
+- **MongoDB:** `mongodb://localhost:27017/taskmanager` (persisted via named volume `mongodb_data`)
+- See [`docs/DOCKER.md`](docs/DOCKER.md) for full architectural details.
+
+### Manual Local Setup
+
+#### 1. Backend
 ```bash
 npm install
 # .env needs: PORT=5000, MONGO_URI=<your mongo uri>, JWT_SECRET=<any long random string>
