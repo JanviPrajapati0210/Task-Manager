@@ -15,6 +15,7 @@ Full-stack Task Management app.
 - Validation middleware: Content-Type check, `:id` format check, task body check
 - React client with optimistic updates, toasts, status/priority filters, and a task chart
 - **In-Memory Caching (node-cache):** Caches `GET /tasks` (all tasks) and `GET /tasks/:id` (single task) with 60s TTL; automatic cache invalidation on `POST`, `PUT`, `DELETE`; debug endpoint `GET /cache/stats` with hit/miss counters and latency headers `X-Cache`, `X-Cache-TTL`, `X-Response-Time` (see [`docs/CACHING.md`](docs/CACHING.md))
+- **Background Notification System (`EventEmitter`):** Asynchronous, non-blocking notification pipeline using Node.js built-in `EventEmitter`. Emits `task-created` (with task title, timestamp, assigned user) and `task-deleted` (with task title, id, timestamp, deletedBy), coupled with an `error` event listener that catches handler failures safely. Confirmed non-blocking with a simulated 2-second slow handler (API returns instantly in ~12ms) (see [`docs/NOTIFICATIONS.md`](docs/NOTIFICATIONS.md))
 - **Practical 8:** route-based code splitting, lazy-loaded chart, memoised task rows
   (see [`docs/PRACTICAL8.md`](docs/PRACTICAL8.md))
 
@@ -82,6 +83,15 @@ Production build: `cd client && npm run build` (chunk sizes are printed in the t
 | POST   | /cache/reset        | –               | Flushes cache and resets counters |
 | POST   | /cache/ttl          | `{ "ttl": 30 }` | Dynamically updates cache TTL (seconds) |
 
+### Background Notification Endpoints
+| Method | Route                             | Body                | Description |
+|--------|-----------------------------------|---------------------|-------------|
+| GET    | /notifications/logs               | –                   | Public debug endpoint for notification audit log & stats |
+| GET    | /tasks/notifications/logs         | –                   | Authenticated notification audit log under `/tasks` |
+| POST   | /notifications/reset              | –                   | Clears notification history and resets event counters |
+| POST   | /tasks/notifications/delay        | `{ "delayMs": 500}` | Dynamically configures the background simulation delay |
+| POST   | /tasks/notifications/simulate-error | –                 | Dispatches a test task event that triggers the `error` event listener |
+
 ## Testing with curl
 
 ```bash
@@ -97,6 +107,9 @@ curl -i http://localhost:5000/tasks -H "Authorization: Bearer <token>"
 
 # Check debug cache stats
 curl http://localhost:5000/cache/stats
+
+# Check background notification audit logs
+curl http://localhost:5000/notifications/logs
 ```
 
 ## Benchmarking & Tests
@@ -106,6 +119,16 @@ Run the automated caching benchmark suite to verify response times, hit/miss cou
 npm run benchmark
 ```
 
+Run the background notification verification suite (validating non-blocking responses, 2-second delay, task-deleted, and error events):
+```bash
+npm run test:notifications
+```
+
+Run the notification timing benchmark (5 sample measurements comparing API latency to background execution):
+```bash
+npm run benchmark:notifications
+```
+
 ## Note on `public/`
 `public/` is the original Practical 4 UI served at `http://localhost:5000/`. It was written before
 authentication was added and sends no token, so its `/tasks` calls now return 401. Use the React
@@ -113,10 +136,12 @@ client in `client/` instead.
 
 ## Key design decisions (for viva)
 
+- **Asynchronous Background Processing with Node.js `EventEmitter`** – Built with native `events` module. Event handlers are decoupled using `setImmediate()` so slow background operations (simulated with 2000 ms delays) do not block Express request handlers. The client receives `201 Created` in ~12 ms while background notifications process independently.
+- **Dedicated `'error'` Event Interceptor** – Node.js crashes if an unhandled `'error'` event is emitted. The custom `NotificationEmitter` registers an explicit `'error'` listener that intercepts all handler exceptions and logs them without crashing the Node.js server.
 - **In-memory caching with `node-cache`** – Caches database query responses in Node's V8 heap. Eliminates round-trips to MongoDB on repeat reads, reducing response times by ~4x–8x.
 - **Cache key isolation per user & query** – Cache keys incorporate user ID, role, and sorted query parameters (`tasks_all:user:<id>:role:<role>?...`), ensuring complete tenant isolation and no duplicate keys from parameter reordering.
 - **Strict write invalidation (POST, PUT, DELETE)** – Write operations immediately purge all affected cache keys after database write commits, guaranteeing zero stale reads.
-- **Fixed-path routing precedence** – `/tasks/cache/stats` is declared before `/tasks/:id` in `routes/tasks.js` so Express matches the static route instead of treating `cache` as a MongoDB `:id`.
+- **Fixed-path routing precedence** – `/tasks/cache/stats` and `/tasks/notifications/logs` are declared before `/tasks/:id` in `routes/tasks.js` so Express matches the static route instead of treating `cache` or `notifications` as a MongoDB `:id`.
 - **`app.use(express.json())` before routes** – otherwise `req.body` is `undefined` on POST/PUT.
 - **Error handler registered last, with 4 params** `(err, req, res, next)` – Express only treats a function as an error handler if it has exactly 4 arguments, and it can only catch errors from middleware/routes registered *before* it.
 - **Every middleware calls `next()`** unless it ends the response – otherwise the request hangs forever.

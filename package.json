@@ -7,6 +7,8 @@
     "start": "node server.js",
     "benchmark": "node scripts/benchmark-cache.js",
     "test:cache": "node scripts/benchmark-cache.js",
+    "test:notifications": "node scripts/test-notifications.js",
+    "benchmark:notifications": "node scripts/benchmark-notifications.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

@@ -2,6 +2,7 @@ const PDFDocument = require('pdfkit');
 const Task = require('../models/Task');
 const { sendTaskCompletedEmail } = require('../utils/taskEmail');
 const taskCache = require('../utils/cache');
+const notificationEmitter = require('../utils/notificationEmitter');
 
 const VALID_STATUSES = ['pending', 'in-progress', 'completed'];
 const VALID_PRIORITIES = ['low', 'medium', 'high'];
@@ -161,6 +162,14 @@ async function createTask(req, res, next) {
     // Invalidate collection caches on write operation (POST)
     taskCache.invalidateAllTasks('create_task');
 
+    // Emit 'task-created' event asynchronously (non-blocking)
+    notificationEmitter.emit('task-created', {
+      task,
+      user: task.user,
+      timestamp: new Date().toISOString(),
+      simulateError: Boolean(req.body && req.body.simulateNotificationError),
+    });
+
     // Created directly as completed -> send the notification email
     if (task.status === 'completed') {
       sendTaskCompletedEmail(req.user, task).catch((err) =>
@@ -252,11 +261,18 @@ async function deleteTask(req, res, next) {
     const scope = { _id: req.params.id };
     if (!isStaff(req.user)) scope.user = req.user._id;
 
-    const deleted = await Task.findOneAndDelete(scope);
+    const deleted = await Task.findOneAndDelete(scope).populate('user', OWNER_FIELDS);
     if (!deleted) return notFound(res, req.params.id);
 
     // Invalidate single task cache and all list caches on write operation (DELETE)
     taskCache.invalidateSingleTask(req.params.id, 'delete_task');
+
+    // Emit 'task-deleted' event asynchronously (non-blocking)
+    notificationEmitter.emit('task-deleted', {
+      task: deleted,
+      user: req.user,
+      timestamp: new Date().toISOString(),
+    });
 
     res.status(200).json({ message: 'Task deleted successfully.', task: deleted });
   } catch (err) {
@@ -505,6 +521,60 @@ function setCacheTTL(req, res) {
   }
 }
 
+// GET /tasks/notifications/logs
+function getNotificationLogs(req, res) {
+  res.status(200).json({
+    stats: notificationEmitter.getStats(),
+    logs: notificationEmitter.getLogs(),
+  });
+}
+
+// POST /tasks/notifications/reset
+function resetNotificationLogs(req, res) {
+  notificationEmitter.clearLogs();
+  res.status(200).json({
+    message: 'Notification logs and metrics reset successfully.',
+    ...notificationEmitter.getStats(),
+  });
+}
+
+// POST /tasks/notifications/delay
+function setNotificationDelay(req, res) {
+  try {
+    const { delayMs } = req.body || {};
+    if (delayMs === undefined) {
+      return badRequest(res, 'delayMs parameter is required (in milliseconds).');
+    }
+    const newDelay = notificationEmitter.setDelay(delayMs);
+    res.status(200).json({
+      message: `Notification simulation delay updated to ${newDelay}ms.`,
+      delayMs: newDelay,
+    });
+  } catch (err) {
+    badRequest(res, err.message);
+  }
+}
+
+// POST /tasks/notifications/simulate-error
+function simulateNotificationError(req, res) {
+  const simulatedTask = {
+    title: req.body?.title || 'Simulated Error Task',
+    _id: 'simulated_task_id',
+    user: req.user,
+  };
+
+  notificationEmitter.emit('task-created', {
+    task: simulatedTask,
+    user: req.user,
+    timestamp: new Date().toISOString(),
+    simulateError: true,
+  });
+
+  res.status(202).json({
+    message: 'Error simulation event dispatched asynchronously. Handler will throw and trigger the error listener.',
+  });
+}
+
 module.exports = {
   getAllTasks,
   getTaskById,
@@ -516,4 +586,8 @@ module.exports = {
   getCacheStats,
   resetCacheStats,
   setCacheTTL,
+  getNotificationLogs,
+  resetNotificationLogs,
+  setNotificationDelay,
+  simulateNotificationError,
 };

@@ -35,6 +35,19 @@ router.post('/cache/reset', controller.resetCacheStats);
 // POST /tasks/cache/ttl           -> dynamically update TTL for experiments ({ ttl: 30 })
 router.post('/cache/ttl', controller.setCacheTTL);
 
+// Background Notification System endpoints (MUST come before '/:id')
+// GET /tasks/notifications/logs    -> inspect recent background notifications & error events
+router.get('/notifications/logs', controller.getNotificationLogs);
+
+// POST /tasks/notifications/reset  -> clear notification history and stats
+router.post('/notifications/reset', controller.resetNotificationLogs);
+
+// POST /tasks/notifications/delay  -> set simulation delay in ms ({ delayMs: 2000 })
+router.post('/notifications/delay', controller.setNotificationDelay);
+
+// POST /tasks/notifications/simulate-error -> trigger error handler test
+router.post('/notifications/simulate-error', controller.simulateNotificationError);
+
 // GET /tasks/:id      -> get one task (id format checked first)
 router.get('/:id', validateTaskId, controller.getTaskById);
 

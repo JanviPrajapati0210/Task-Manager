@@ -2,7 +2,7 @@ import TaskManager from '../components/TaskManager';
 
 function TasksPage() {
   return (
-    <div className="page">
+    <div className="board-page-container">
       <TaskManager />
     </div>
   );

@@ -12,6 +12,8 @@ function TopBar() {
     document.documentElement.classList.toggle('light', isLight);
   }, [isLight]);
 
+  const isStaff = user?.role === 'admin' || user?.role === 'manager';
+
   const navItems = [
     {
       to: '/dashboard',
@@ -34,18 +36,22 @@ function TopBar() {
         </svg>
       ),
     },
-    {
-      to: '/team',
-      label: 'Team & Roles',
-      icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-          <circle cx="9" cy="7" r="4"></circle>
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-        </svg>
-      ),
-    },
+    ...(isStaff
+      ? [
+          {
+            to: '/team',
+            label: 'Team & Roles',
+            icon: (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+            ),
+          },
+        ]
+      : []),
     {
       to: '/analytics',
       label: 'Analytics (Lazy)',
@@ -75,8 +81,7 @@ function TopBar() {
     const r = (role || 'user').toUpperCase();
     if (r === 'ADMIN') return '🛡️ ADMIN';
     if (r === 'MANAGER') return '👔 MANAGER';
-    if (r === 'EMPLOYEE') return '👤 EMPLOYEE';
-    return '👤 USER';
+    return '👤 EMPLOYEE';
   };
 
   return (

@@ -10,6 +10,7 @@ const errorHandler = require('./middleware/errorHandler');
 const taskRoutes = require('./routes/tasks');
 const authRoutes = require('./routes/auth');
 const taskCache = require('./utils/cache');
+const notificationEmitter = require('./utils/notificationEmitter');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -51,6 +52,21 @@ app.post('/cache/ttl', (req, res) => {
   } catch (err) {
     res.status(400).json({ error: 'Validation Error', message: err.message });
   }
+});
+
+// 5b. Notification debug endpoints (Public debug inspection)
+app.get('/notifications/logs', (req, res) => {
+  res.status(200).json({
+    stats: notificationEmitter.getStats(),
+    logs: notificationEmitter.getLogs(),
+  });
+});
+app.post('/notifications/reset', (req, res) => {
+  notificationEmitter.clearLogs();
+  res.status(200).json({
+    message: 'Notification logs and metrics reset successfully',
+    ...notificationEmitter.getStats(),
+  });
 });
 
 // 6. Auth routes (Practical 7) - register/login are public, /me is protected internally
