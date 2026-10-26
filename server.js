@@ -26,7 +26,9 @@ const connectDB = () => {
       setTimeout(connectDB, 3000);
     });
 };
-connectDB();
+if (process.env.NODE_ENV !== 'test') {
+  connectDB();
+}
 
 // --- Pipeline order matters! ---
 
@@ -88,8 +90,10 @@ app.use(notFound);
 // 8. Global error handler - ALWAYS LAST
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`Task Manager API running on http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`Task Manager API running on http://localhost:${PORT}`);
+  });
+}
 
 module.exports = app;

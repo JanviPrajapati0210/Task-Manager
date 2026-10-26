@@ -10,7 +10,7 @@
     "test:notifications": "node scripts/test-notifications.js",
     "benchmark:notifications": "node scripts/benchmark-notifications.js",
     "lint": "eslint .",
-    "test": "node --test tests/unit.test.js"
+    "test": "jest --detectOpenHandles --forceExit"
   },
   "keywords": [],
   "author": "",
@@ -29,6 +29,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "eslint": "^10.13.0"
+    "eslint": "^10.13.0",
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
   }
 }

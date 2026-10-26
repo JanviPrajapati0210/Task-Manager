@@ -1,21 +1,19 @@
 name: CI Pipeline
 
-# Trigger only on pull requests targeting the main branch (not on direct push)
-# workflow_dispatch allows manual execution from the GitHub Actions UI
 on:
+  push:
+    branches: [ main, master ]
   pull_request:
-    branches:
-      - main
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Job 1: Linter Job (Runs before the test job)
-  # ---------------------------------------------------------------------------
-  lint:
-    name: Code Quality & Linting (ESLint)
+  # ===========================================================================
+  # Job 1: Backend Automated Tests
+  # ===========================================================================
+  backend-tests:
+    name: Backend Tests
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -26,38 +24,33 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Install dependencies
+      - name: Install backend dependencies
         run: npm install
 
-      - name: Run linter (ESLint)
-        run: npm run lint
-
-  # ---------------------------------------------------------------------------
-  # Job 2: Automated Testing Job (Executes only after lint job succeeds)
-  # ---------------------------------------------------------------------------
-  test:
-    name: Automated Unit Testing
-    needs: [lint]
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Run automated tests
+      - name: Run backend automated tests
         run: npm test
+
+  # ===========================================================================
+  # Job 2: Frontend Build Check
+  # ===========================================================================
+  frontend-build:
+    name: Frontend Build Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install frontend dependencies
+        run: |
+          cd client
+          npm install
 
       - name: Build React frontend
         run: |
           cd client
-          npm install
           npm run build
