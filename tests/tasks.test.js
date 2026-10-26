@@ -46,7 +46,7 @@ describe("Task Management API - CI/CD Automated Test Suite", () => {
   describe("GET /tasks (Authentication Guard)", () => {
     it("should return HTTP 401 Unauthorized when no JWT token is provided", async () => {
       const res = await request(app).get("/tasks");
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(401);
       expect(res.body.error).toBe("Unauthorized");
     });
   });
