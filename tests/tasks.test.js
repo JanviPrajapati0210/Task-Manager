@@ -13,6 +13,7 @@ process.env.PORT = "5099";
 const Task = require("../models/Task");
 const User = require("../models/User");
 const notificationEmitter = require("../utils/notificationEmitter");
+const aiRateLimiter = require("../middleware/aiRateLimiter");
 const app = require("../server");
 
 // Disable background artificial delay for instantaneous test runs
@@ -29,6 +30,7 @@ const validToken = jwt.sign(
 describe("Task Management API - CI/CD Automated Test Suite", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    aiRateLimiter.reset();
 
     // Default mock user for requireAuth middleware
     jest.spyOn(User, "findById").mockReturnValue({
@@ -154,6 +156,60 @@ describe("Task Management API - CI/CD Automated Test Suite", () => {
       const res = await request(app).get("/auth/google/client-id");
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty("clientId");
+    });
+  });
+
+  describe("POST /tasks/ai/suggest (AI-Powered Assistant & Rate Limiter)", () => {
+    it("should return HTTP 401 Unauthorized when no JWT token is provided", async () => {
+      const res = await request(app)
+        .post("/tasks/ai/suggest")
+        .send({ title: "Fix login security bug" });
+      expect(res.status).toBe(401);
+    });
+
+    it("should return HTTP 400 Bad Request when task title is missing", async () => {
+      const res = await request(app)
+        .post("/tasks/ai/suggest")
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({ title: "   " });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("Validation Error");
+    });
+
+    it("should return HTTP 200 with auto-generated description, priority, subtasks and disclaimer", async () => {
+      const res = await request(app)
+        .post("/tasks/ai/suggest")
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({
+          title: "Fix critical auth token expiration bug",
+          description: "Users reported session logout issues",
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.suggestion).toHaveProperty("suggestedDescription");
+      expect(res.body.suggestion).toHaveProperty("suggestedPriority", "high");
+      expect(res.body.suggestion).toHaveProperty("subtasks");
+      expect(Array.isArray(res.body.suggestion.subtasks)).toBe(true);
+      expect(res.body.suggestion).toHaveProperty("disclaimer");
+    });
+
+    it("should enforce rate limiting (HTTP 429) when requests exceed 1 per minute", async () => {
+      // First request succeeds
+      const firstRes = await request(app)
+        .post("/tasks/ai/suggest")
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({ title: "First AI task request" });
+      expect(firstRes.status).toBe(200);
+
+      // Immediate second request from the same authenticated user is rate-limited
+      const secondRes = await request(app)
+        .post("/tasks/ai/suggest")
+        .set("Authorization", `Bearer ${validToken}`)
+        .send({ title: "Second AI task request immediately" });
+      expect(secondRes.status).toBe(429);
+      expect(secondRes.body.error).toBe("Rate Limit Exceeded");
+      expect(secondRes.body).toHaveProperty("retryAfterSeconds");
     });
   });
 });

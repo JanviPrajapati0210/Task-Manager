@@ -3,6 +3,7 @@ const Task = require('../models/Task');
 const { sendTaskCompletedEmail } = require('../utils/taskEmail');
 const taskCache = require('../utils/cache');
 const notificationEmitter = require('../utils/notificationEmitter');
+const aiService = require('../services/aiService');
 
 const VALID_STATUSES = ['pending', 'in-progress', 'completed'];
 const VALID_PRIORITIES = ['low', 'medium', 'high'];
@@ -575,6 +576,35 @@ function simulateNotificationError(req, res) {
   });
 }
 
+// POST /tasks/ai/suggest
+async function getAiTaskSuggestion(req, res, next) {
+  try {
+    const { title, description, simulateUnavailable } = req.body || {};
+    if (simulateUnavailable) {
+      return res.status(503).json({
+        error: 'Service Unavailable',
+        message: 'AI suggestions are temporarily unavailable. Please enter the description manually.',
+      });
+    }
+
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      return badRequest(res, 'Task title is required to generate AI suggestions.');
+    }
+
+    const suggestion = await aiService.generateTaskSuggestion(title, description);
+    return res.status(200).json({
+      success: true,
+      suggestion,
+    });
+  } catch (err) {
+    console.error('[AI Suggestion Error]', err.message);
+    return res.status(503).json({
+      error: 'Service Unavailable',
+      message: 'AI suggestions are temporarily unavailable. Please enter the description manually.',
+    });
+  }
+}
+
 module.exports = {
   getAllTasks,
   getTaskById,
@@ -590,4 +620,5 @@ module.exports = {
   resetNotificationLogs,
   setNotificationDelay,
   simulateNotificationError,
+  getAiTaskSuggestion,
 };

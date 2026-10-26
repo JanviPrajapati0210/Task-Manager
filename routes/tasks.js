@@ -6,6 +6,7 @@ const validateContentType = require('../middleware/validateContentType');
 const validateTaskId = require('../middleware/validateTaskId');
 const validateTask = require('../middleware/validateTask');
 const requireAuth = require('../middleware/auth');
+const aiRateLimiter = require('../middleware/aiRateLimiter');
 
 // Every task route below requires a valid JWT (Practical 7 requirement)
 router.use(requireAuth);
@@ -47,6 +48,10 @@ router.post('/notifications/delay', controller.setNotificationDelay);
 
 // POST /tasks/notifications/simulate-error -> trigger error handler test
 router.post('/notifications/simulate-error', controller.simulateNotificationError);
+
+// AI-Powered Task Assistant (MUST come before '/:id')
+// POST /tasks/ai/suggest -> Generates description, priority, subtasks, and deadline using Gemini/OpenAI
+router.post('/ai/suggest', aiRateLimiter, controller.getAiTaskSuggestion);
 
 // GET /tasks/:id      -> get one task (id format checked first)
 router.get('/:id', validateTaskId, controller.getTaskById);

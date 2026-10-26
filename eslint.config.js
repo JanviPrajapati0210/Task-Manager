@@ -23,6 +23,8 @@ module.exports = [
         clearImmediate: 'readonly',
         fetch: 'readonly',
         Buffer: 'readonly',
+        AbortController: 'readonly',
+        AbortSignal: 'readonly',
       },
     },
     rules: {
@@ -36,6 +38,22 @@ module.exports = [
       ],
       'no-console': 'off',
       'no-undef': 'error',
+    },
+  },
+  {
+    files: ['tests/**/*.js', '**/*.test.js'],
+    languageOptions: {
+      globals: {
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        jest: 'readonly',
+      },
     },
   },
   {

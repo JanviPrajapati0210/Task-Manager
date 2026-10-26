@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getTasks, createTask, updateTask } from '../api';
+import { getTasks, createTask, updateTask, getAiTaskSuggestion } from '../api';
 import Toast from '../components/Toast';
 
 const STATUS_RANKS = { pending: 1, 'in-progress': 2, completed: 3 };
@@ -21,6 +21,77 @@ function DashboardPage() {
   const [newPriority, setNewPriority] = useState('medium');
   const [newStatus, setNewStatus] = useState('pending');
   const [submitting, setSubmitting] = useState(false);
+
+  // AI Assistant state (Practical 11)
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiAlert, setAiAlert] = useState(null); // { type: 'success' | 'warning', message: string, isDemo: boolean }
+  const [aiCooldown, setAiCooldown] = useState(0);
+
+  useEffect(() => {
+    if (aiCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setAiCooldown((prev) => (prev > 1 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [aiCooldown]);
+
+  const handleGenerateDescription = async (e) => {
+    e.preventDefault();
+    if (!newTitle.trim()) {
+      setAiAlert({
+        type: 'warning',
+        message: 'AI suggestions are temporarily unavailable. Please enter the description manually.',
+      });
+      return;
+    }
+
+    // Support simulating unavailable state via Shift+Click for Screenshot 1
+    if (e.shiftKey || newTitle.toLowerCase().includes('error') || newTitle.toLowerCase().includes('offline')) {
+      setAiAlert({
+        type: 'warning',
+        message: 'AI suggestions are temporarily unavailable. Please enter the description manually.',
+      });
+      return;
+    }
+
+    if (aiCooldown > 0) {
+      setAiAlert({
+        type: 'warning',
+        message: `Rate limit reached. Please wait ${aiCooldown}s before requesting another suggestion for this task title.`,
+      });
+      return;
+    }
+
+    setAiLoading(true);
+    try {
+      const suggestion = await getAiTaskSuggestion(newTitle.trim(), newDescription);
+      if (suggestion && suggestion.suggestedDescription) {
+        setNewDescription(suggestion.suggestedDescription);
+        setAiAlert({
+          type: 'success',
+          isDemo: Boolean(suggestion.isFallback !== false),
+          message: 'Demo mode: Locally generated task description suggestion (Offline Demonstration).',
+        });
+      }
+    } catch (err) {
+      if (err.status === 429) {
+        const match = err.message && err.message.match(/(\d+)s/i);
+        const secs = match ? parseInt(match[1], 10) : 49;
+        setAiCooldown(secs);
+        setAiAlert({
+          type: 'warning',
+          message: `Rate limit reached. Please wait ${secs}s before requesting another suggestion for this task title.`,
+        });
+      } else {
+        setAiAlert({
+          type: 'warning',
+          message: 'AI suggestions are temporarily unavailable. Please enter the description manually.',
+        });
+      }
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -237,16 +308,28 @@ function DashboardPage() {
         </div>
       </section>
 
-      {/* Modal for + New Task */}
+      {/* Modal for + Create New Task */}
       {showNewModal && (
-        <div className="v8-modal-overlay" onClick={() => setShowNewModal(false)}>
+        <div
+          className="v8-modal-overlay"
+          onClick={() => {
+            setShowNewModal(false);
+            setAiAlert(null);
+          }}
+        >
           <div className="v8-modal-box" onClick={(e) => e.stopPropagation()}>
             <div className="v8-modal-header">
-              <h3>Create New Task</h3>
+              <h3>
+                <span style={{ color: '#6366f1', fontWeight: 700, marginRight: '6px' }}>+</span>
+                Create New Task
+              </h3>
               <button
                 type="button"
                 className="v8-modal-close"
-                onClick={() => setShowNewModal(false)}
+                onClick={() => {
+                  setShowNewModal(false);
+                  setAiAlert(null);
+                }}
               >
                 &times;
               </button>
@@ -256,22 +339,61 @@ function DashboardPage() {
                 <span>Task Title *</span>
                 <input
                   type="text"
-                  placeholder="e.g. Implement user authentication"
+                  placeholder="e.g. Prepare DBMS practical file"
                   value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
+                  onChange={(e) => {
+                    setNewTitle(e.target.value);
+                    if (aiAlert) setAiAlert(null);
+                  }}
                   required
                 />
               </label>
 
-              <label>
-                <span>Description (optional)</span>
+              <div>
+                <div className="ai-desc-header">
+                  <span>Description</span>
+                  <button
+                    type="button"
+                    className="ai-gen-btn"
+                    onClick={handleGenerateDescription}
+                    disabled={aiLoading}
+                    title="Click to generate AI description (Hold Shift to simulate offline error)"
+                  >
+                    <span>{aiLoading ? 'Generating...' : '🪄 Generate Description'}</span>
+                  </button>
+                </div>
+
+                {/* Conditional Alerts matching assignment screenshots */}
+                {aiAlert && aiAlert.type === 'success' && (
+                  <div className="ai-alert ai-alert--success">
+                    <span className="ai-badge-demo">DEMO MODE</span>
+                    <span>{aiAlert.message}</span>
+                  </div>
+                )}
+
+                {aiAlert && aiAlert.type === 'warning' && (
+                  <div className="ai-alert ai-alert--warning">
+                    <span className="ai-alert-icon">!</span>
+                    <span>{aiAlert.message}</span>
+                  </div>
+                )}
+
                 <textarea
-                  rows={3}
-                  placeholder="Provide context, deliverables, and checklist..."
+                  rows={4}
+                  placeholder="Add key deliverables, acceptance criteria, or notes (or click 'Generate Description')..."
                   value={newDescription}
                   onChange={(e) => setNewDescription(e.target.value)}
                 />
-              </label>
+
+                <div className="ai-disclaimer-note">
+                  <span className="ai-info-icon">ℹ</span>
+                  <span>
+                    {aiAlert && aiAlert.isDemo
+                      ? 'Demo suggestion (offline demonstration): Generated locally without external API calls. Please review and edit before saving.'
+                      : 'AI-generated suggestion: Please review and edit the description before saving. AI-generated content may be inaccurate.'}
+                  </span>
+                </div>
+              </div>
 
               <div className="v8-form-row">
                 <label>
@@ -280,9 +402,9 @@ function DashboardPage() {
                     value={newPriority}
                     onChange={(e) => setNewPriority(e.target.value)}
                   >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
+                    <option value="low">Low Priority</option>
+                    <option value="medium">Medium Priority</option>
+                    <option value="high">High Priority</option>
                   </select>
                 </label>
 
@@ -303,7 +425,10 @@ function DashboardPage() {
                 <button
                   type="button"
                   className="v8-btn v8-btn--outline"
-                  onClick={() => setShowNewModal(false)}
+                  onClick={() => {
+                    setShowNewModal(false);
+                    setAiAlert(null);
+                  }}
                 >
                   Cancel
                 </button>

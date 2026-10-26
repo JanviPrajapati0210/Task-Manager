@@ -10,6 +10,7 @@ import {
   downloadPdf,
 } from '../api';
 import Toast from './Toast';
+import AiTaskAssistant from './AiTaskAssistant';
 
 // Heavy component lazy-loaded on demand (Practical 8 requirement)
 const TaskChart = lazy(() => import('./TaskChart'));
@@ -342,6 +343,23 @@ const TaskManager = () => {
 
           <button
             type="button"
+            className="btn btn--outline board-header__btn"
+            style={{ borderColor: 'var(--accent)', color: 'var(--accent)', gap: '6px' }}
+            onClick={() => {
+              setNewTitle('');
+              setNewDescription('');
+              setShowNewModal(true);
+            }}
+            title="Create task with AI assistance"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+            </svg>
+            <span>✨ AI Assist</span>
+          </button>
+
+          <button
+            type="button"
             className="board-btn-new-task"
             onClick={() => setShowNewModal(true)}
           >
@@ -656,6 +674,16 @@ const TaskManager = () => {
               />
             </label>
 
+            {/* AI-Powered Task Assistant (Practical 11) */}
+            <AiTaskAssistant
+              title={newTitle}
+              description={newDescription}
+              onApply={({ description, priority }) => {
+                if (description) setNewDescription(description);
+                if (priority) setNewPriority(priority);
+              }}
+            />
+
             <label style={{ display: 'grid', gap: '6px' }}>
               <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)' }}>Description</span>
               <textarea
@@ -734,6 +762,19 @@ const TaskManager = () => {
                 required
               />
             </label>
+
+            {/* AI-Powered Task Assistant for Edit Modal */}
+            <AiTaskAssistant
+              title={editForm.title}
+              description={editForm.description}
+              onApply={({ description, priority }) => {
+                setEditForm((prev) => ({
+                  ...prev,
+                  ...(description ? { description } : {}),
+                  ...(priority ? { priority } : {}),
+                }));
+              }}
+            />
 
             <label style={{ display: 'grid', gap: '6px' }}>
               <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)' }}>Description</span>

@@ -155,6 +155,17 @@ export async function deleteTask(id) {
   return apiFetch(`/tasks/${id}`, { method: 'DELETE' });
 }
 
+// ---------- AI Task Assistant (Practical 11) ----------
+
+export async function getAiTaskSuggestion(title, description = '', options = {}) {
+  const data = await apiFetch('/tasks/ai/suggest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, description, ...options }),
+  });
+  return data.suggestion;
+}
+
 // ---------- Reports ----------
 
 // params: { startDate, endDate, status, allUsers }
