@@ -28,6 +28,11 @@ jobs:
         run: npm install
 
       - name: Run backend automated tests
+        env:
+          NODE_ENV: test
+          JWT_SECRET: ci_test_jwt_secret_key_98765
+          GOOGLE_CLIENT_ID: ci-mock-google-client-id.apps.googleusercontent.com
+          PORT: 5099
         run: npm test
 
   # ===========================================================================

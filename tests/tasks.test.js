@@ -2,15 +2,21 @@ const request = require("supertest");
 const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 
-// Set environment configuration for automated CI testing
-process.env.JWT_SECRET = process.env.JWT_SECRET || "ci_test_jwt_secret_key_98765";
+// Set environment configuration for automated CI testing BEFORE requiring modules
 process.env.NODE_ENV = "test";
+process.env.JWT_SECRET = process.env.JWT_SECRET || "ci_test_jwt_secret_key_98765";
+process.env.GOOGLE_CLIENT_ID =
+  process.env.GOOGLE_CLIENT_ID || "ci-mock-google-client-id.apps.googleusercontent.com";
 process.env.PORT = "5099";
 
 // Mock Mongoose models to allow isolated API testing without a live MongoDB connection
 const Task = require("../models/Task");
 const User = require("../models/User");
+const notificationEmitter = require("../utils/notificationEmitter");
 const app = require("../server");
+
+// Disable background artificial delay for instantaneous test runs
+notificationEmitter.setDelay(0);
 
 // Generate mock JWT token for authenticated requests
 const testUserId = new mongoose.Types.ObjectId().toString();
@@ -33,6 +39,7 @@ describe("Task Management API - CI/CD Automated Test Suite", () => {
         role: "user",
       }),
     });
+    jest.spyOn(User, "updateOne").mockResolvedValue({ acknowledged: true, modifiedCount: 1 });
   });
 
   afterAll(async () => {

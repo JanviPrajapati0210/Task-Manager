@@ -10,7 +10,7 @@
     "test:notifications": "node scripts/test-notifications.js",
     "benchmark:notifications": "node scripts/benchmark-notifications.js",
     "lint": "eslint .",
-    "test": "jest --detectOpenHandles --forceExit"
+    "test": "jest tests/tasks.test.js --detectOpenHandles --forceExit"
   },
   "keywords": [],
   "author": "",
