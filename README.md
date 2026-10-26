@@ -1,5 +1,7 @@
 # Task Manager
 
+[![CI Pipeline](https://github.com/JanviPrajapati0210/Task-Manager/actions/workflows/ci.yml/badge.svg)](https://github.com/JanviPrajapati0210/Task-Manager/actions/workflows/ci.yml)
+
 Full-stack Task Management app.
 
 - **Backend:** Node.js + Express + MongoDB (Mongoose), JWT authentication, bcrypt password hashing
@@ -16,6 +18,8 @@ Full-stack Task Management app.
 - React client with optimistic updates, toasts, status/priority filters, and a task chart
 - **In-Memory Caching (node-cache):** Caches `GET /tasks` (all tasks) and `GET /tasks/:id` (single task) with 60s TTL; automatic cache invalidation on `POST`, `PUT`, `DELETE`; debug endpoint `GET /cache/stats` with hit/miss counters and latency headers `X-Cache`, `X-Cache-TTL`, `X-Response-Time` (see [`docs/CACHING.md`](docs/CACHING.md))
 - **Background Notification System (`EventEmitter`):** Asynchronous, non-blocking notification pipeline using Node.js built-in `EventEmitter`. Emits `task-created` (with task title, timestamp, assigned user) and `task-deleted` (with task title, id, timestamp, deletedBy), coupled with an `error` event listener that catches handler failures safely. Confirmed non-blocking with a simulated 2-second slow handler (API returns instantly in ~12ms) (see [`docs/NOTIFICATIONS.md`](docs/NOTIFICATIONS.md))
+- **CI/CD Automation (GitHub Actions):** Multi-job workflow (`lint` and `test` jobs with `needs: [lint]`) triggered automatically on pull requests targeting `main`. Runs `npm install`, ESLint code quality checks, and automated unit tests with live status reporting (see [`docs/CI_CD.md`](docs/CI_CD.md)).
+- **Containerization (Docker & Compose):** Complete container orchestration for frontend (Nginx multi-stage build), backend (Node 20 Alpine), and MongoDB with named volume persistence (`mongodb_data`) (see [`docs/DOCKER.md`](docs/DOCKER.md)).
 - **Practical 8:** route-based code splitting, lazy-loaded chart, memoised task rows
   (see [`docs/PRACTICAL8.md`](docs/PRACTICAL8.md))
 
@@ -23,6 +27,7 @@ Full-stack Task Management app.
 
 ```
 Task-Manager/
+├── .github/workflows/ci.yml     # GitHub Actions CI workflow (lint -> test)
 ├── server.js                    # app setup + middleware pipeline order
 ├── .env                         # PORT, MONGO_URI, JWT_SECRET (not committed)
 ├── routes/                      # auth.js, tasks.js
@@ -31,7 +36,8 @@ Task-Manager/
 ├── models/                      # User.js, Task.js
 ├── public/                      # original Practical 4 vanilla UI (predates auth, see note)
 ├── data/, logs/
-├── docs/PRACTICAL8.md
+├── tests/                       # Automated unit tests for CI/CD
+├── docs/                        # CACHING.md, NOTIFICATIONS.md, DOCKER.md, CI_CD.md, PRACTICAL8.md
 └── client/                      # React frontend (Vite)
     └── src/ {pages, components, utils, api.js}
 ```
@@ -124,7 +130,17 @@ curl http://localhost:5000/cache/stats
 curl http://localhost:5000/notifications/logs
 ```
 
-## Benchmarking & Tests
+## CI/CD, Benchmarking & Tests
+
+Run the linter (ESLint):
+```bash
+npm run lint
+```
+
+Run automated unit tests:
+```bash
+npm test
+```
 
 Run the automated caching benchmark suite to verify response times, hit/miss counters, invalidations, and TTL expiration:
 ```bash
@@ -148,6 +164,8 @@ client in `client/` instead.
 
 ## Key design decisions (for viva)
 
+- **Two-stage CI pipeline with dependency ordering (`needs: [lint]`)** – Separating linting (`lint` job) and automated unit testing (`test` job) ensures fast failure feedback: if code quality or syntax fails ESLint, the test runner is aborted immediately, saving CI runner minutes.
+- **Pull Request trigger isolation** – The workflow triggers on `pull_request` targeting `main` rather than direct `push`, enforcing code review and verification gates before merging code into production.
 - **Asynchronous Background Processing with Node.js `EventEmitter`** – Built with native `events` module. Event handlers are decoupled using `setImmediate()` so slow background operations (simulated with 2000 ms delays) do not block Express request handlers. The client receives `201 Created` in ~12 ms while background notifications process independently.
 - **Dedicated `'error'` Event Interceptor** – Node.js crashes if an unhandled `'error'` event is emitted. The custom `NotificationEmitter` registers an explicit `'error'` listener that intercepts all handler exceptions and logs them without crashing the Node.js server.
 - **In-memory caching with `node-cache`** – Caches database query responses in Node's V8 heap. Eliminates round-trips to MongoDB on repeat reads, reducing response times by ~4x–8x.

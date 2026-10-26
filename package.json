@@ -9,7 +9,8 @@
     "test:cache": "node scripts/benchmark-cache.js",
     "test:notifications": "node scripts/test-notifications.js",
     "benchmark:notifications": "node scripts/benchmark-notifications.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "lint": "eslint .",
+    "test": "node --test tests/unit.test.js"
   },
   "keywords": [],
   "author": "",
@@ -25,5 +26,9 @@
     "node-cache": "^5.1.2",
     "nodemailer": "^10.0.15",
     "pdfkit": "^0.20.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0"
   }
 }
